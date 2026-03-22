@@ -1,0 +1,3 @@
+Customer Bob Smith reports that billing sync fails every Monday morning.
+The issue blocks invoice generation for finance and should be treated as high priority.
+Contact: bob.smith@example.com

@@ -1,0 +1,36 @@
+{
+  "job_id": "demo-job-1",
+  "status": "succeeded",
+  "attempts": 1,
+  "result": {
+    "name": "Alice Doe",
+    "email": "alice@example.com",
+    "years_experience": 5
+  },
+  "events": [
+    {
+      "event_type": "job_created",
+      "event_payload": {
+        "task_type": "resume_intake"
+      }
+    },
+    {
+      "event_type": "pipeline_started",
+      "event_payload": {
+        "job_id": "demo-job-1"
+      }
+    },
+    {
+      "event_type": "llm_attempt_started",
+      "event_payload": {
+        "attempt": 1
+      }
+    },
+    {
+      "event_type": "job_succeeded",
+      "event_payload": {
+        "attempt": 1
+      }
+    }
+  ]
+}

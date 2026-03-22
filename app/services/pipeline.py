@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.enums import JobStatus
 from app.core.schemas import ResumeIntakeResult, SupportTicketIntakeResult
 from app.db.models import IntakeJob, IntakeJobEvent
+from app.services.fallback import run_fallback
 from app.services.llm_client import LLMClient
 from app.services.validators import parse_json_payload, validate_payload
 
@@ -80,6 +81,37 @@ class IntakePipeline:
             session.refresh(job)
             return job
 
+        fallback_payload = run_fallback(job.task_type, job.input_text)
+        if fallback_payload:
+            missing_fields = self._missing_required_fields(schema, fallback_payload)
+            job.normalized_output = fallback_payload
+            job.failure_reason = last_error
+            job.review_required = bool(missing_fields)
+            self._record_event(
+                session,
+                job,
+                "fallback_used",
+                {"missing_fields": missing_fields},
+            )
+
+            if missing_fields:
+                job.status = JobStatus.NEEDS_REVIEW
+                self._record_event(
+                    session,
+                    job,
+                    "job_needs_review",
+                    {"missing_fields": missing_fields},
+                )
+            else:
+                validated = validate_payload(schema, fallback_payload)
+                job.normalized_output = validated.model_dump()
+                job.status = JobStatus.SUCCEEDED
+                self._record_event(session, job, "job_succeeded", {"via": "fallback"})
+
+            session.commit()
+            session.refresh(job)
+            return job
+
         job.status = JobStatus.FAILED
         job.failure_reason = last_error
         self._record_event(session, job, "job_failed", {"error": last_error})
@@ -105,3 +137,15 @@ class IntakePipeline:
             )
         )
         session.flush()
+
+    def _missing_required_fields(
+        self,
+        schema: type[BaseModel],
+        payload: dict,
+    ) -> list[str]:
+        missing_fields: list[str] = []
+        for field_name in schema.model_fields:
+            value = payload.get(field_name)
+            if value is None or value == "":
+                missing_fields.append(field_name)
+        return missing_fields

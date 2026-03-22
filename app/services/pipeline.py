@@ -5,6 +5,7 @@ from json import JSONDecodeError
 from time import sleep
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import JobStatus
@@ -18,6 +19,18 @@ from app.services.validators import parse_json_payload, validate_payload
 TASK_SCHEMAS: dict[str, type[BaseModel]] = {
     "resume_intake": ResumeIntakeResult,
     "support_ticket_intake": SupportTicketIntakeResult,
+}
+
+TRACE_STAGE_ORDER = {
+    "job_created": 0,
+    "pipeline_started": 1,
+    "llm_attempt_started": 2,
+    "llm_attempt_failed": 3,
+    "validation_failed": 4,
+    "fallback_used": 5,
+    "job_succeeded": 6,
+    "job_needs_review": 6,
+    "job_failed": 6,
 }
 
 
@@ -149,3 +162,42 @@ class IntakePipeline:
             if value is None or value == "":
                 missing_fields.append(field_name)
         return missing_fields
+
+
+def build_ordered_trace(session: Session, job_id: str) -> list[dict]:
+    events = session.scalars(
+        select(IntakeJobEvent).where(IntakeJobEvent.job_id == job_id),
+    ).all()
+
+    ordered_events = sorted(
+        events,
+        key=lambda event: (
+            _attempt_sort_key(event),
+            TRACE_STAGE_ORDER.get(event.event_type, 99),
+            event.created_at,
+        ),
+    )
+
+    trace: list[dict] = []
+    for index, event in enumerate(ordered_events, start=1):
+        trace.append(
+            {
+                "sequence": index,
+                "event_type": event.event_type,
+                "payload": event.event_payload or {},
+            }
+        )
+
+    return trace
+
+
+def _attempt_sort_key(event: IntakeJobEvent) -> float:
+    payload = event.event_payload or {}
+
+    if event.event_type == "job_created":
+        return -1
+    if event.event_type in {"pipeline_started"}:
+        return 0
+    if event.event_type in {"fallback_used", "job_succeeded", "job_needs_review", "job_failed"}:
+        return float("inf")
+    return float(payload.get("attempt", 0))

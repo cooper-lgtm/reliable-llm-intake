@@ -1,0 +1,2 @@
+Alice Doe is a Python engineer with 5 years of experience building backend services and LLM tooling.
+She previously worked at ACME and can be reached at alice@example.com.

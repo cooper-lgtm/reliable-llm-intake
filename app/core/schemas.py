@@ -14,12 +14,12 @@ class CreateJobResponse(BaseModel):
 
 
 class ResumeIntakeResult(BaseModel):
-    name: str | None = None
-    email: str | None = None
-    years_experience: int | None = None
+    name: str
+    email: str
+    years_experience: int
 
 
 class SupportTicketIntakeResult(BaseModel):
-    customer_name: str | None = None
-    issue_summary: str | None = None
-    priority: str | None = None
+    customer_name: str
+    issue_summary: str
+    priority: str
